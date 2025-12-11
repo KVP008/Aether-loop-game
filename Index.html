@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Aether Loop: Overdrive V6 - Persistence & UI Refinement</title>
+    <style>
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-red: #ff0055;
+            --neon-purple: #bc13fe;
+            --bg-color: #050508;
+            --combo-color: #ff9900; 
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            touch-action: none; 
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* CRT Scanline Overlay */
+        #scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.1) 50%,
+                rgba(0,0,0,0.1)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 20;
+        }
+
+        .hud-score {
+            position: absolute;
+            top: 12%;
+            font-size: 8rem;
+            font-weight: 900; 
+            color: rgba(255, 255, 255, 0.05); 
+            transition: transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275), color 0.3s;
+            font-variant-numeric: tabular-nums;
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .hud-score.active {
+            color: rgba(255, 255, 255, 0.8);
+            transform: scale(1.1);
+            text-shadow: 0 0 10px var(--neon-blue); 
+        }
+
+        /* Combo Display Refinement - More subtle */
+        #combo-display {
+            position: absolute;
+            top: 45%; 
+            font-size: 1.8rem; /* Smaller */
+            font-weight: 900;
+            color: var(--combo-color);
+            text-shadow: 0 0 8px rgba(255, 153, 0, 0.5); /* Lighter shadow */
+            opacity: 0;
+            transform: scale(0.5) translateY(-20px);
+            transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+        }
+        #combo-display.visible {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+
+        #start-screen, #game-over-screen, #settings-menu {
+            background: rgba(10, 10, 15, 0.85); 
+            backdrop-filter: blur(20px); 
+            padding: 50px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            pointer-events: auto;
+            transition: opacity 0.3s;
+            max-width: 80%;
+            min-width: 300px;
+        }
+
+        h1 {
+            color: white;
+            font-weight: 900;
+            text-transform: uppercase;
+            font-size: 2.5rem;
+            letter-spacing: 6px;
+            margin: 0 0 15px 0;
+            text-shadow: 0 0 20px var(--neon-blue); 
+            font-style: italic;
+        }
+
+        p {
+            color: #ccc;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+            line-height: 1.6;
+            font-weight: 300;
+        }
+
+        .btn {
+            background: rgba(0, 243, 255, 0.1);
+            color: var(--neon-blue);
+            border: 2px solid var(--neon-blue);
+            padding: 18px 50px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            cursor: pointer;
+            border-radius: 12px; 
+            transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.1); 
+            font-family: inherit; 
+        }
+
+        .btn:active {
+            background: var(--neon-blue);
+            color: black;
+            transform: scale(0.95);
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.8); 
+        }
+
+        .tutorial {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 30px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .hidden {
+            opacity: 0;
+            pointer-events: none !important;
+            display: none !important; 
+        }
+        .dim-hidden {
+             opacity: 0;
+             pointer-events: none !important;
+        }
+
+        #vignette {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.8) 90%);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* Pause/Settings Button (Top Left) */
+        #settings-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 8px 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            pointer-events: auto;
+            border-radius: 8px;
+            z-index: 30; 
+            background: rgba(0, 243, 255, 0.05);
+            border-color: rgba(0, 243, 255, 0.3);
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        /* Settings Menu Styles */
+        #settings-menu {
+            position: absolute;
+            z-index: 40;
+            padding: 30px;
+            text-align: left;
+        }
+        #settings-menu h2 {
+            color: var(--neon-blue);
+            font-size: 1.8rem;
+            margin-top: 0;
+            margin-bottom: 25px;
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .setting-label {
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+        .meta-label {
+             color: #666;
+             font-size: 0.9rem;
+        }
+
+        /* Toggle Switch CSS */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 28px;
+        }
+        .switch input {opacity: 0; width: 0; height: 0;}
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #444;
+            transition: .4s;
+            border-radius: 28px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: var(--neon-blue);
+            box-shadow: 0 0 5px var(--neon-blue);
+        }
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+
+        .meta-info {
+            font-size: 0.75rem;
+            color: #555;
+            margin-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 10px;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+        .meta-info span {
+            color: #888;
+            font-weight: 500;
+        }
+
+        /* Close button for menu */
+        #close-settings-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid white;
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        /* New: Current Speed Display */
+        #speed-display {
+            position: absolute;
+            top: 5%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 0.9rem;
+            font-weight: 500;
+            letter-spacing: 1px;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        #speed-display.hidden {
+            opacity: 0;
+        }
+        
+        /* New: High Score (Header) */
+        #high-score-header {
+            position: absolute; 
+            top: 1%; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            color: rgba(0, 243, 255, 0.4); 
+            font-size: 1.1rem; 
+            font-weight: 600; 
+            text-shadow: 0 0 5px rgba(0, 243, 255, 0.2); 
+            font-variant-numeric: tabular-nums;
+        }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+
+    <div id="ui-layer">
+        
+        <!-- Header HUD Elements -->
+        <div id="high-score-header">
+            HI: <span id="high-score-display">0</span>
+        </div>
+        <div id="speed-display" class="hidden">
+            SPEED: <span id="current-speed-value">0</span>
+        </div>
+        
+        <!-- Pause/Settings Button (In-Game use) -->
+        <button class="btn hidden" id="settings-btn" title="Settings" aria-label="Settings">PAUSE</button>
+
+        <div id="score-display" class="hud-score">0</div>
+        
+        <!-- Combo Text Element -->
+        <div id="combo-display"></div>
+
+        <div id="start-screen">
+            <h1>Aether Loop</h1>
+            <p>
+                <span style="color:var(--neon-red); font-weight:bold">BLOCK RED</span> <br>
+                <span style="color:var(--neon-blue); font-weight:bold">DODGE BLUE</span>
+            </p>
+            <button class="btn" id="start-btn">ENGAGE</button>
+            
+            <!-- Settings Button for Start Screen -->
+            <button class="btn" id="start-settings-btn" style="margin-top: 20px; padding: 10px 30px; font-size: 1rem; letter-spacing: 2px;">SETTINGS</button>
+
+            <div class="tutorial">Tap Left / Right to Rotate</div>
+            <div id="initial-high-score" class="meta-info">Your High Score: <span>0</span></div>
+        </div>
+
+        <div id="game-over-screen" class="hidden">
+            <h1 style="color:var(--neon-red); text-shadow: 0 0 20px var(--neon-red);">CRITICAL ERROR</h1>
+            <p id="final-score-text">SYNC RATE: 0</p>
+            <div id="game-over-high-score" class="meta-info">NEW HIGH: <span style="color:var(--neon-blue);">0</span></div>
+            <button class="btn" id="restart-btn" style="border-color: var(--neon-red); color: var(--neon-red); background: rgba(255,0,85,0.1); box-shadow: 0 0 10px rgba(255, 0, 85, 0.2);">REBOOT</button>
+        </div>
+
+        <!-- Settings Menu -->
+        <div id="settings-menu" class="hidden">
+            <h2>System Settings</h2>
+            
+            <div class="setting-row">
+                <span class="setting-label">Sound Effects (SFX)</span>
+                <label class="switch">
+                    <input type="checkbox" id="sfx-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="setting-row">
+                <span class="setting-label">Display Current Speed</span>
+                <label class="switch">
+                    <input type="checkbox" id="speed-display-toggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="setting-row">
+                <span class="setting-label">Visual Intensity</span>
+                <span class="meta-label">HIGH</span>
+            </div>
+            
+            <button class="btn" id="close-settings-btn" style="padding: 10px 20px;">BACK</button>
+            
+            <div class="meta-info">
+                Authenticated User ID: <span id="auth-user-id">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    
+    // --- Global Firebase/App Configuration ---
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    let app, auth, db;
+    let userId = null;
+    let isAuthReady = false;
+    let currentHighScore = 0;
+    
+    // --- Game State ---
+    let width, height, cx, cy;
+    let pixelRatio = window.devicePixelRatio || 1;
+    let lastTime = 0;
+    let isPlaying = false;
+    let isPaused = true; 
+    let score = 0;
+    let time = 0; 
+    let combo = 0;
+    let lastSuccessTime = 0;
+    let shieldAngle = 0;
+    let shieldHistory = []; 
+    let particles = [];
+    let effects = [];
+    let stars = [];
+    let plasmaParticles = [];
+    let shake = 0;
+    let glitchFrame = 0;
+    let lastSpawnTime = 0; 
+    
+    // --- User Settings State ---
+    const settings = {
+        sfxEnabled: true,
+        showSpeed: false
+    };
+
+    setLogLevel('error'); // Set to 'debug' for detailed logging
+
+    // --- Firebase Initialization ---
+    if (firebaseConfig) {
+        app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+        
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                document.getElementById('auth-user-id').innerText = userId;
+                await loadHighScore();
+            } else {
+                console.log("No user signed in. Attempting sign-in...");
+                if (initialAuthToken) {
+                    try {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } catch (error) {
+                        console.error("Custom token sign-in failed, falling back to anonymous:", error);
+                        await signInAnonymously(auth);
+                    }
+                } else {
+                    await signInAnonymously(auth);
+                }
+            }
+            isAuthReady = true;
+        });
+    } else {
+        console.error("Firebase configuration not found. High scores will not be saved.");
+        isAuthReady = true;
+        document.getElementById('auth-user-id').innerText = "Unauthenticated (No Config)";
+    }
+
+    // --- Firestore Logic ---
+
+    function getHighScoreDocRef() {
+        if (!db || !userId) return null;
+        return doc(db, 'artifacts', appId, 'users', userId, 'game_data', 'high_score_doc');
+    }
+
+    async function loadHighScore() {
+        const ref = getHighScoreDocRef();
+        if (!ref) {
+            currentHighScore = 0;
+            updateHighScoreUI(0);
+            return;
+        }
+
+        try {
+            const docSnap = await getDoc(ref);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                currentHighScore = data.score || 0;
+            } else {
+                await setDoc(ref, { score: 0, lastUpdated: new Date() });
+                currentHighScore = 0;
+            }
+            updateHighScoreUI(currentHighScore);
+        } catch (error) {
+            console.error("Error loading high score:", error);
+            currentHighScore = 0;
+            updateHighScoreUI(0);
+        }
+    }
+
+    async function saveHighScore(newScore) {
+        if (newScore <= currentHighScore) return;
+
+        const ref = getHighScoreDocRef();
+        if (!ref) return;
+
+        try {
+            await updateDoc(ref, {
+                score: newScore,
+                lastUpdated: new Date()
+            });
+            currentHighScore = newScore;
+            updateHighScoreUI(newScore);
+        } catch (error) {
+            console.error("Error saving high score:", error);
+        }
+    }
+
+    function updateHighScoreUI(score) {
+        document.getElementById('high-score-display').innerText = score;
+        document.getElementById('initial-high-score').querySelector('span').innerText = score;
+    }
+
+    // --- Audio System ---
+    class AudioSys {
+        constructor() {
+            this.ctx = null;
+            this.masterGain = null;
+        }
+
+        init() {
+            if (!this.ctx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = 0.4;
+                this.masterGain.connect(this.ctx.destination);
+                this.startDrone();
+            } else if (this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+        }
+        
+        toggleSfx(enabled) {
+            settings.sfxEnabled = enabled;
+        }
+
+        startDrone() {
+            if (!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sawtooth';
+            osc.frequency.value = 40;
+            
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 80;
+            filter.Q.value = 1;
+
+            const lfo = this.ctx.createOscillator();
+            lfo.type = 'sine';
+            lfo.frequency.value = 0.5;
+
+            const lfoGain = this.ctx.createGain();
+            lfoGain.gain.value = 40;
+
+            lfo.connect(lfoGain);
+            lfoGain.connect(filter.frequency);
+
+            osc.connect(filter);
+            filter.connect(this.masterGain);
+            
+            osc.start();
+            lfo.start();
+        }
+
+        playTone(type) {
+            if (!this.ctx || !settings.sfxEnabled) return;
+
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+
+            if (type === 'pop') {
+                const noise = this.ctx.createBufferSource();
+                const bufferSize = this.ctx.sampleRate * 0.05; 
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const output = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+                noise.buffer = buffer;
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.setValueAtTime(4000, now);
+                filter.Q.value = 1;
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                noise.start(now);
+                noise.stop(now + 0.05);
+            } else if (type === 'hit') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'score') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.2);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            } else if (type === 'die') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(20, now + 0.6);
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+                osc.start(now);
+                osc.stop(now + 0.6);
+            } else if (type === 'combo') {
+                const baseFreq = 1000;
+                for(let i=0; i<3; i++) {
+                    const comboOsc = this.ctx.createOscillator();
+                    const comboGain = this.ctx.createGain();
+                    comboOsc.connect(comboGain);
+                    comboGain.connect(this.masterGain);
+                    comboOsc.type = 'triangle';
+                    comboOsc.frequency.setValueAtTime(baseFreq * (1 + i * 0.2), now + i * 0.05);
+                    comboGain.gain.setValueAtTime(0.1, now + i * 0.05);
+                    comboGain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.15);
+                    comboOsc.start(now + i * 0.05);
+                    comboOsc.stop(now + i * 0.05 + 0.2);
+                }
+            } else if (type === 'click') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.01);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            }
+        }
+    }
+
+    // --- Game Configuration & Entity Classes ---
+    const config = {
+        coreRadius: 35,
+        orbitRadius: 130, 
+        shieldArc: Math.PI / 1.8, 
+        shieldWidth: 12, 
+        rotationSpeed: 7, 
+        colors: {
+            bg: '#050508',
+            red: '#ff0055',
+            blue: '#00f3ff',
+            core: '#ffffff',
+            combo: '#ff9900'
+        },
+        initialSpeed: 60, 
+        speedMultiplier: 0.2, 
+        maxSpawnRateInterval: 1.8,
+        minSpawnRateInterval: 0.5, 
+        spawnRateDecay: 0.01, 
+        minAngularSeparation: Math.PI / 2.75, 
+        enemyTrailCollisionLength: 30, 
+        exitBufferDistance: 60, 
+        comboThreshold: 1.0, 
+    };
+    
+    // Star, Plasma, Shockwave, FloatingText, Spark classes remain the same
+    class Star {
+        constructor(w, h) { this.reset(w, h, true); }
+        reset(w, h, randomDist = false) {
+            this.angle = Math.random() * Math.PI * 2;
+            this.dist = randomDist ? Math.random() * Math.max(w, h) : 10;
+            this.z = Math.random() * 1.5 + 0.5; 
+            this.alpha = 0;
+        }
+        update(dt, speedFactor, w, h) {
+            this.dist += (30 + (speedFactor * 15)) * dt * this.z; 
+            this.alpha = Math.min(0.7, this.dist / 200); 
+            const maxDist = Math.max(w, h) * 0.7;
+            if (this.dist > maxDist) this.reset(w, h);
+        }
+        draw(ctx, cx, cy) {
+            const x = cx + Math.cos(this.angle) * this.dist;
+            const y = cy + Math.sin(this.angle) * this.dist;
+            ctx.globalAlpha = this.alpha * 0.3; 
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(x, y, this.z, 0, Math.PI*2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        }
+    }
+    class Plasma {
+        constructor() {
+            this.distance = config.coreRadius + (Math.random() * 50);
+            this.angle = Math.random() * Math.PI * 2;
+            this.speed = Math.random() * 0.2 + 0.1;
+            this.life = 1.0;
+            this.radius = Math.random() * 1.5 + 0.5;
+            this.color = Math.random() > 0.5 ? config.colors.blue : config.colors.red;
+        }
+        update(dt) {
+            this.angle += this.speed * dt;
+            this.distance += dt * 5; 
+            this.life -= dt * 0.5;
+            return this.life > 0 && this.distance < config.orbitRadius;
+        }
+        draw(ctx, cx, cy) {
+            const x = cx + Math.cos(this.angle) * this.distance;
+            const y = cy + Math.sin(this.angle) * this.distance;
+            ctx.globalAlpha = this.life * 0.2; 
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(x, y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    class Shockwave {
+        constructor(x, y, color) {
+            this.x = x;
+            this.y = y;
+            this.color = color;
+            this.radius = 10;
+            this.life = 1.0;
+            this.width = 10;
+        }
+        update(dt) {
+            this.radius += 350 * dt;
+            this.life -= dt * 2.5;
+            this.width *= 0.9;
+            return this.life > 0;
+        }
+        draw(ctx) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = Math.max(1, this.width * this.life);
+            ctx.globalAlpha = this.life * 0.6; 
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = this.color;
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+    class FloatingText {
+        constructor(x, y, text, isCombo = false) {
+            this.x = x;
+            this.y = y;
+            this.text = text;
+            this.life = 1.0;
+            this.vy = -50; 
+            this.isCombo = isCombo;
+        }
+        update(dt) {
+            this.y += this.vy * dt;
+            this.life -= dt * (this.isCombo ? 1 : 1.5);
+            return this.life > 0;
+        }
+        draw(ctx) {
+            ctx.save();
+            ctx.font = this.isCombo ? "bold 30px 'SF Pro Display'" : "bold 24px 'SF Pro Display'";
+            ctx.fillStyle = this.isCombo ? config.colors.combo : "#fff";
+            ctx.globalAlpha = this.life;
+            ctx.shadowBlur = this.isCombo ? 10 : 3; 
+            ctx.shadowColor = this.isCombo ? config.colors.combo : "#fff";
+            ctx.fillText(this.text, this.x, this.y);
+            ctx.restore();
+        }
+    }
+    class Spark {
+        constructor(x, y, color) {
+            this.x = x;
+            this.y = y;
+            this.color = color;
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 200 + 50;
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            this.life = Math.random() * 0.4 + 0.2; 
+            this.decay = Math.random() * 2.5 + 1.5;
+        }
+        update(dt) {
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            this.vx *= 0.95; 
+            this.vy *= 0.95;
+            this.life -= dt * this.decay;
+            return this.life > 0;
+        }
+        draw(ctx) {
+            ctx.globalAlpha = this.life;
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, 3, 3); 
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    // --- Core Game Logic ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false }); 
+    const audio = new AudioSys();
+
+    // Initialize Stars
+    for(let i=0; i<60; i++) stars.push(new Star(100, 100));
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width * pixelRatio;
+        canvas.height = height * pixelRatio;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        ctx.scale(pixelRatio, pixelRatio);
+        cx = width / 2;
+        cy = height / 2;
+        
+        if (width < 600) {
+            config.orbitRadius = width * 0.28;
+            config.coreRadius = 25;
+        } else {
+            config.orbitRadius = 140;
+            config.coreRadius = 40;
+        }
+        
+        if (isPaused) draw(0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- Input Logic ---
+    const input = { direction: 0, keyboardDirection: 0 };
+    let activeTouchMap = new Map();
+
+    function calculateNetDirection() {
+        if (activeTouchMap.size > 0) {
+            let lastDirection = 0;
+            for (const dir of activeTouchMap.values()) {
+                lastDirection = dir;
+            }
+            return lastDirection;
+        }
+        return input.keyboardDirection;
+    }
+
+    function handleInputStart(identifier, clientX) {
+        if (!isPlaying || isPaused) return;
+        activeTouchMap.set(identifier, clientX < width / 2 ? 1 : -1);
+        input.direction = calculateNetDirection();
+    }
+
+    document.addEventListener('touchstart', (e) => {
+        if (e.target.closest('#start-screen, #game-over-screen, #settings-menu, #settings-btn, #start-settings-btn')) return;
+        e.preventDefault(); 
+        audio.init(); 
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            handleInputStart(t.identifier, t.clientX);
+        }
+    }, { passive: false });
+
+    document.addEventListener('touchend', (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            activeTouchMap.delete(e.changedTouches[i].identifier);
+        }
+        input.direction = calculateNetDirection();
+    });
+
+    document.addEventListener('mousedown', (e) => {
+        if (e.target.closest('#start-screen, #game-over-screen, #settings-menu, #settings-btn, #start-settings-btn')) return;
+        audio.init(); 
+        handleInputStart(0, e.clientX); 
+    });
+    document.addEventListener('mouseup', () => { activeTouchMap.delete(0); input.direction = calculateNetDirection(); });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') input.keyboardDirection = -1;
+        if (e.key === 'ArrowRight') input.keyboardDirection = 1;
+        input.direction = calculateNetDirection(); 
+    });
+    document.addEventListener('keyup', (e) => {
+        if (e.key === 'ArrowLeft' && input.keyboardDirection === -1) input.keyboardDirection = 0;
+        if (e.key === 'ArrowRight' && input.keyboardDirection === 1) input.keyboardDirection = 0;
+        input.direction = calculateNetDirection(); 
+    });
+
+    // --- Gameplay Class ---
+    class Particle {
+        constructor(angle) {
+            this.angle = angle;
+            this.distance = config.coreRadius;
+            this.type = Math.random() > 0.4 ? 'enemy' : 'energy';
+            this.active = true;
+            this.radius = this.type === 'enemy' ? 6 : 4;
+            this.color = this.type === 'enemy' ? config.colors.red : config.colors.blue;
+
+            this.speed = config.initialSpeed + (score * config.speedMultiplier); 
+        }
+
+        update(dt) {
+            this.distance += this.speed * dt;
+            
+            const shieldIn = config.orbitRadius - config.shieldWidth / 2;
+            const shieldOut = config.orbitRadius + config.shieldWidth / 2;
+            
+            if (this.active) {
+                let angleDiff = Math.abs(normalizeAngle(this.angle - shieldAngle));
+                if (angleDiff > Math.PI) angleDiff = (Math.PI * 2) - angleDiff;
+                const isWithinArc = angleDiff < config.shieldArc / 2;
+
+                if (isWithinArc) {
+                    if (this.type === 'enemy') {
+                        const trailLen = config.enemyTrailCollisionLength;
+                        const overlap = (this.distance - trailLen <= shieldOut) && (this.distance >= shieldIn);
+                        if (overlap) {
+                            this.kill(true);
+                            return;
+                        }
+                    } else {
+                        if (this.distance >= shieldIn && this.distance <= shieldOut) {
+                            endGame();
+                            return;
+                        }
+                    }
+                }
+            }
+            
+            if (this.active && this.distance > shieldOut + config.exitBufferDistance) {
+                if (this.type === 'enemy') {
+                    endGame();
+                } else {
+                    this.kill(false);
+                }
+            }
+        }
+
+        kill(blockedByShield) {
+            this.active = false;
+            
+            const currentTime = performance.now() / 1000;
+            if (currentTime - lastSuccessTime < config.comboThreshold) {
+                combo++;
+                audio.playTone('combo');
+                const comboEl = document.getElementById('combo-display');
+                const comboText = combo >= 5 ? "FURY!" : combo >= 3 ? "CHAIN!" : "COMBO!";
+                comboEl.innerText = `x${combo} ${comboText}`;
+                comboEl.classList.add('visible');
+                // Use a short timeout to make the visibility subtle
+                setTimeout(() => comboEl.classList.remove('visible'), 300); 
+
+            } else {
+                combo = 1;
+            }
+            lastSuccessTime = currentTime;
+            addScore(combo); 
+            
+            audio.playTone(blockedByShield ? 'pop' : 'score'); 
+            
+            const px = cx + Math.cos(this.angle) * config.orbitRadius;
+            const py = cy + Math.sin(this.angle) * config.orbitRadius;
+            
+            effects.push(new Shockwave(px, py, this.color));
+            effects.push(new FloatingText(px, py - 20, `+${combo}`)); 
+            
+            for(let i=0; i<10; i++) effects.push(new Spark(px, py, this.color));
+
+            if (blockedByShield) {
+                shake = 8;
+                glitchFrame = 3;
+            }
+        }
+
+        draw(ctx) {
+            if (!this.active) return;
+            const px = cx + Math.cos(this.angle) * this.distance;
+            const py = cy + Math.sin(this.angle) * this.distance;
+
+            // Draw Head
+            ctx.beginPath();
+            ctx.arc(px, py, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.shadowBlur = 10; 
+            ctx.shadowColor = this.color;
+            ctx.fill();
+            
+            // Draw Dynamic Trail
+            const trailLen = this.type === 'enemy' ? 40 : 25;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(cx + Math.cos(this.angle) * (this.distance - trailLen), cy + Math.sin(this.angle) * (this.distance - trailLen));
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 4;
+            ctx.shadowBlur = 0;
+            ctx.stroke();
+        }
+    }
+
+    // --- Main Logic ---
+
+    function normalizeAngle(a) { let r = a % (Math.PI * 2); if(r < 0) r += Math.PI * 2; return r; }
+    function getAngDist(a1, a2) { const d = Math.abs(a1 - a2); return Math.min(d, Math.PI * 2 - d); }
+
+    function addScore(multiplier = 1) {
+        score += multiplier;
+        const el = document.getElementById('score-display');
+        el.innerText = score;
+        el.classList.add('active');
+        setTimeout(() => el.classList.remove('active'), 100);
+    }
+
+    function initGame() {
+        if (isPlaying || !isAuthReady) return; 
+        score = 0;
+        time = 0;
+        combo = 0;
+        lastSuccessTime = 0;
+        shieldAngle = -Math.PI/2;
+        particles = [];
+        effects = [];
+        shieldHistory = [];
+        isPaused = false; 
+
+        plasmaParticles = [];
+        for(let i=0; i<15; i++) plasmaParticles.push(new Plasma());
+        
+        lastSpawnTime = 0; 
+
+        document.getElementById('score-display').innerText = '0';
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('combo-display').classList.remove('visible');
+        document.getElementById('settings-menu').classList.add('hidden');
+        
+        // Show in-game PAUSE button and hide start button
+        document.getElementById('settings-btn').innerText = "PAUSE";
+        document.getElementById('settings-btn').classList.remove('hidden'); 
+        document.getElementById('start-settings-btn').classList.add('hidden');
+
+
+        isPlaying = true;
+        lastTime = performance.now();
+        activeTouchMap.clear();
+        input.direction = 0;
+        input.keyboardDirection = 0;
+        requestAnimationFrame(loop);
+    }
+
+    function endGame() {
+        isPlaying = false;
+        isPaused = true;
+        audio.playTone('die');
+        shake = 30;
+        glitchFrame = 10;
+        
+        // Hide in-game button, show start button
+        document.getElementById('settings-btn').classList.add('hidden'); 
+        document.getElementById('start-settings-btn').classList.remove('hidden'); 
+
+        // --- High Score Check and Save ---
+        let finalScoreEl = document.getElementById('game-over-high-score');
+        finalScoreEl.classList.remove('hidden');
+        if (score > currentHighScore) {
+            finalScoreEl.innerHTML = `NEW HIGH: <span style="color:var(--neon-blue);">${score}</span>`;
+            saveHighScore(score);
+        } else {
+            finalScoreEl.innerHTML = `HIGH SCORE: <span style="color:#666;">${currentHighScore}</span>`;
+        }
+
+        draw(0);
+        document.getElementById('final-score-text').innerText = `SYNC RATE: ${score}`;
+        document.getElementById('game-over-screen').classList.remove('hidden');
+    }
+
+    function loop(now) {
+        if (!isPlaying) return;
+        
+        const dt = (now - lastTime) / 1000;
+        lastTime = now;
+        
+        if (!isPaused) {
+            update(dt);
+        } else {
+            // Update the pause button label while paused in-game
+            document.getElementById('settings-btn').innerText = "RESUME";
+        }
+        draw(dt);
+        requestAnimationFrame(loop);
+    }
+
+    function update(dt) {
+        time += dt;
+
+        // Reset pause button label when running
+        document.getElementById('settings-btn').innerText = "PAUSE";
+        
+        // Current Speed Update
+        const currentSpeed = config.initialSpeed + (score * config.speedMultiplier);
+        document.getElementById('current-speed-value').innerText = currentSpeed.toFixed(1);
+        if (settings.showSpeed) {
+            document.getElementById('speed-display').classList.remove('hidden');
+        } else {
+            document.getElementById('speed-display').classList.add('hidden');
+        }
+
+
+        // Rotation & Trail 
+        if (input.direction !== 0) {
+            shieldAngle += input.direction * config.rotationSpeed * dt;
+            shieldHistory.push({ angle: shieldAngle, life: 1.0 });
+        }
+        shieldAngle = normalizeAngle(shieldAngle);
+        shieldHistory.forEach(h => h.life -= dt * 5); 
+        shieldHistory = shieldHistory.filter(h => h.life > 0);
+
+        // Stars & Plasma 
+        stars.forEach(s => s.update(dt, score * config.speedMultiplier / 20, width, height)); 
+        plasmaParticles.forEach(p => p.update(dt));
+        while (plasmaParticles.length < 15) plasmaParticles.push(new Plasma()); 
+        plasmaParticles = plasmaParticles.filter(p => p.life > 0);
+
+        // Spawning 
+        const interval = Math.max(config.minSpawnRateInterval, config.maxSpawnRateInterval - (score * config.spawnRateDecay));
+        
+        if (time - lastSpawnTime > interval) {
+            let newAngle = 0, valid = false;
+            for (let i = 0; i < 10; i++) {
+                newAngle = Math.random() * Math.PI * 2;
+                let safe = true;
+                for (const p of particles) {
+                    if (p.distance > config.coreRadius + 10 && p.distance < config.orbitRadius) { 
+                        if (getAngDist(newAngle, p.angle) < config.minAngularSeparation) { safe = false; break; }
+                    }
+                }
+                if (valid = safe) { break; }
+            }
+            if (valid) { 
+                particles.push(new Particle(newAngle)); 
+                lastSpawnTime = time; 
+            }
+        }
+
+        // Updates
+        particles.forEach(p => p.update(dt));
+        particles = particles.filter(p => p.active);
+        effects = effects.filter(e => e.update(dt));
+
+        if (shake > 0) shake *= 0.9;
+        if (shake < 0.5) shake = 0;
+        if (glitchFrame > 0) glitchFrame--;
+    }
+
+    function draw(dt) {
+        // Drawing Logic (Canvas remains the same)
+        ctx.fillStyle = config.colors.bg;
+        ctx.fillRect(0, 0, width, height);
+        
+        ctx.save();
+        
+        let gx = 0, gy = 0;
+        if (shake > 0 || glitchFrame > 0) {
+            gx = (Math.random() - 0.5) * shake;
+            gy = (Math.random() - 0.5) * shake;
+            ctx.translate(gx, gy);
+        }
+
+        ctx.globalCompositeOperation = 'source-over';
+        stars.forEach(s => s.draw(ctx, cx, cy));
+
+        const radialGradient = ctx.createRadialGradient(cx, cy, config.coreRadius * 2, cx, cy, Math.max(width, height) * 0.7);
+        radialGradient.addColorStop(0, 'rgba(255, 255, 255, 0.01)'); 
+        radialGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.2)');
+        radialGradient.addColorStop(1, 'rgba(0, 0, 0, 0.5)');
+        ctx.fillStyle = radialGradient;
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.globalCompositeOperation = 'lighter';
+        
+        plasmaParticles.forEach(p => p.draw(ctx, cx, cy));
+
+        ctx.shadowBlur = 15; 
+        ctx.shadowColor = config.colors.blue;
+        
+        const pulse = 1 + Math.sin(time * 10) * 0.03; 
+        ctx.beginPath();
+        ctx.arc(cx, cy, config.coreRadius * pulse, 0, Math.PI*2);
+        ctx.fillStyle = '#000';
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = config.colors.blue;
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(time * 2.5);
+        ctx.beginPath();
+        ctx.arc(0, 0, config.coreRadius * 0.7, 0, Math.PI * 1.5);
+        ctx.strokeStyle = config.colors.blue;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+        
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(-time * 1.8);
+        ctx.beginPath();
+        ctx.arc(0, 0, config.coreRadius * 0.4, 0, Math.PI);
+        ctx.strokeStyle = config.colors.purple;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.shadowBlur = 0;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(cx, cy, config.orbitRadius, 0, Math.PI*2); ctx.stroke();
+        ctx.globalCompositeOperation = 'lighter';
+
+        ctx.shadowBlur = 10; 
+        ctx.shadowColor = config.colors.blue;
+        shieldHistory.forEach(h => {
+            ctx.globalAlpha = h.life * 0.2; 
+            ctx.beginPath();
+            ctx.arc(cx, cy, config.orbitRadius, h.angle - config.shieldArc/2, h.angle + config.shieldArc/2);
+            ctx.strokeStyle = config.colors.blue;
+            ctx.lineWidth = config.shieldWidth;
+            ctx.stroke();
+        });
+        ctx.globalAlpha = 1.0;
+
+        if (glitchFrame > 0) {
+            ctx.shadowColor = config.colors.red;
+            ctx.strokeStyle = config.colors.red;
+            ctx.beginPath();
+            ctx.arc(cx + 5, cy, config.orbitRadius, shieldAngle - config.shieldArc/2, shieldAngle + config.shieldArc/2);
+            ctx.stroke();
+        }
+
+        ctx.shadowBlur = 10; 
+        ctx.shadowColor = 'white';
+        ctx.beginPath();
+        ctx.arc(cx, cy, config.orbitRadius, shieldAngle - config.shieldArc/2, shieldAngle + config.shieldArc/2);
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = config.shieldWidth;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        particles.forEach(p => p.draw(ctx));
+        effects.forEach(e => e.draw(ctx));
+
+        ctx.restore();
+    }
+
+    // --- UI and Settings Logic ---
+    function toggleSettings() {
+        if (document.getElementById('settings-menu').classList.contains('hidden')) {
+            showSettings();
+        } else {
+            hideSettings();
+        }
+    }
+
+    function showSettings() {
+        isPaused = true;
+        document.getElementById('settings-menu').classList.remove('hidden');
+        // Hide in-game pause button while settings are open
+        document.getElementById('settings-btn').classList.add('dim-hidden'); 
+    }
+
+    function hideSettings() {
+        // Only resume if the game was playing when settings were opened
+        if (isPlaying) {
+            isPaused = false;
+            lastTime = performance.now(); 
+            // Re-show the in-game pause button
+            document.getElementById('settings-btn').classList.remove('dim-hidden'); 
+        } else {
+            // If on the start screen, make sure the start settings button is visible
+            document.getElementById('start-settings-btn').classList.remove('hidden');
+        }
+        document.getElementById('settings-menu').classList.add('hidden');
+    }
+
+    // --- Event Bindings ---
+    const allButtons = document.querySelectorAll('.btn');
+    allButtons.forEach(button => {
+        button.addEventListener('click', () => audio.playTone('click'));
+    });
+
+    // Start Screen Button opens settings
+    document.getElementById('start-settings-btn').addEventListener('click', showSettings);
+
+    // In-Game Pause/Resume Button toggles pause and settings
+    document.getElementById('settings-btn').addEventListener('click', toggleSettings);
+
+    document.getElementById('start-btn').addEventListener('click', initGame);
+    document.getElementById('restart-btn').addEventListener('click', initGame);
+    document.getElementById('close-settings-btn').addEventListener('click', hideSettings);
+
+    document.getElementById('sfx-toggle').addEventListener('change', (e) => {
+        audio.toggleSfx(e.target.checked);
+    });
+    
+    document.getElementById('speed-display-toggle').addEventListener('change', (e) => {
+        settings.showSpeed = e.target.checked;
+        // The speed display is updated in the game loop's update function
+    });
+
+
+    // Initial load sequence
+    window.onload = () => {
+        resize();
+        draw(0);
+        updateHighScoreUI(currentHighScore);
+        document.getElementById('settings-btn').classList.add('hidden'); // Ensure in-game button is hidden initially
+    };
+
+</script>
+</body>
+</html>
